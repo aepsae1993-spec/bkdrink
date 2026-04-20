@@ -202,11 +202,13 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
 }
 
 // ─── Order Detail Card ────────────────────────────────────────────────────────
-function OrderCard({ order, showToast }) {
+function OrderCard({ order, showToast, onDeleted }) {
   const [expanded, setExpanded] = useState(false)
   const [notifying, setNotifying] = useState(false)
   const [summaries, setSummaries] = useState(order.memberSummaries || [])
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const paid = summaries.filter(s => s.is_paid).length
   const total = summaries.length
@@ -236,10 +238,62 @@ function OrderCard({ order, showToast }) {
     showToast(`📣 ส่งแจ้งเตือนสำเร็จ ${res.notified}/${res.total} คน`)
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    const res = await API('/api/orders', { method: 'DELETE', body: { id: order.id } })
+    setDeleting(false)
+    setConfirmDelete(false)
+    if (res.error) return showToast('❌ ' + res.error, 'error')
+    showToast('🗑️ ลบออเดอร์แล้ว')
+    onDeleted(order.id)
+  }
+
   const paidMembers   = summaries.filter(s => s.is_paid)
   const unpaidMembers = summaries.filter(s => !s.is_paid)
 
   return (
+    <>
+      {/* Confirm Delete Dialog */}
+      {confirmDelete && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            background: '#0f0f23', border: '1px solid #ef444440',
+            borderRadius: 16, padding: 24, maxWidth: 340, width: '100%', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🗑️</div>
+            <h3 style={{ color: '#f87171', margin: '0 0 8px' }}>ลบออเดอร์?</h3>
+            <p style={{ color: '#aaa', fontSize: 14, marginBottom: 20 }}>
+              {order.order_number} จะถูกลบถาวรพร้อมข้อมูลการจ่ายทั้งหมด
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{
+                  flex: 1, padding: '10px', background: 'transparent',
+                  border: '1px solid #2a2a5a', color: '#aaa', borderRadius: 10,
+                  cursor: 'pointer', fontFamily: "'Sarabun', sans-serif", fontSize: 14,
+                }}
+              >ยกเลิก</button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{
+                  flex: 1, padding: '10px', background: '#ef4444',
+                  border: 'none', color: 'white', borderRadius: 10,
+                  cursor: deleting ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Sarabun', sans-serif", fontSize: 14, fontWeight: 600,
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'กำลังลบ...' : 'ลบเลย'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     <div style={{
       background: '#0f0f23',
       border: `1px solid ${expanded ? '#3a3a6a' : '#1a1a3e'}`,
@@ -263,14 +317,28 @@ function OrderCard({ order, showToast }) {
             </div>
             {order.note && <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>💬 {order.note}</div>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             <div style={{ textAlign: 'right' }}>
               <div style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 16 }}>฿{totalAmt.toLocaleString()}</div>
               <div style={{ color: paid === total && total > 0 ? '#10b981' : '#888', fontSize: 12 }}>
                 {paid}/{total} จ่ายแล้ว
               </div>
             </div>
-            <span style={{ color: '#444', fontSize: 18, marginTop: 2 }}>
+            {/* ปุ่มลบ */}
+            <button
+              onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+              title="ลบออเดอร์"
+              style={{
+                background: 'transparent', border: '1px solid #2a2a5a',
+                color: '#666', borderRadius: 8, width: 30, height: 30,
+                cursor: 'pointer', fontSize: 14, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#f87171' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a5a'; e.currentTarget.style.color = '#666' }}
+            >🗑️</button>
+            <span style={{ color: '#444', fontSize: 18, marginTop: 4 }}>
               {expanded ? '▲' : '▼'}
             </span>
           </div>
@@ -349,6 +417,7 @@ function OrderCard({ order, showToast }) {
         </div>
       )}
     </div>
+    </>
   )
 }
 
@@ -660,7 +729,8 @@ export default function AdminPage() {
                   <Empty icon="🧋" message="ยังไม่มีออเดอร์ กดสร้างออเดอร์แรกได้เลย!" />
                 ) : (
                   orders.map(o => (
-                    <OrderCard key={o.id} order={o} showToast={showToast} />
+                    <OrderCard key={o.id} order={o} showToast={showToast}
+                      onDeleted={id => setOrders(prev => prev.filter(o => o.id !== id))} />
                   ))
                 )}
               </div>
