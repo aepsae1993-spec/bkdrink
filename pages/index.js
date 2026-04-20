@@ -202,100 +202,216 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
 }
 
 // ─── Order Detail Card ────────────────────────────────────────────────────────
-function OrderCard({ order, members, onRefresh, showToast }) {
+function OrderCard({ order, showToast }) {
   const [expanded, setExpanded] = useState(false)
   const [notifying, setNotifying] = useState(false)
+  const [summaries, setSummaries] = useState(order.memberSummaries || [])
+  const [loadingDetail, setLoadingDetail] = useState(false)
 
-  const paid = order.memberSummaries?.filter(s => s.is_paid).length || 0
-  const total = order.memberSummaries?.length || 0
-  const totalAmt = order.memberSummaries?.reduce((s, m) => s + (m.total_due || 0), 0) || 0
+  const paid = summaries.filter(s => s.is_paid).length
+  const total = summaries.length
+  const totalAmt = summaries.reduce((s, m) => s + (m.total_due || 0), 0)
 
-  const handleNotify = async () => {
+  // ดึงข้อมูลล่าสุดทุกครั้งที่กด expand
+  const handleToggle = async () => {
+    const opening = !expanded
+    setExpanded(opening)
+    if (!opening) return
+
+    setLoadingDetail(true)
+    const res = await fetch(`/api/orders/${order.id}/pay`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}` },
+    }).then(r => r.json())
+    setLoadingDetail(false)
+
+    if (res.memberSummaries) setSummaries(res.memberSummaries)
+  }
+
+  const handleNotify = async (e) => {
+    e.stopPropagation()
     setNotifying(true)
-    const res = await API('/api/notify', {
-      method: 'POST',
-      body: { orderId: order.id },
-    })
+    const res = await API('/api/notify', { method: 'POST', body: { orderId: order.id } })
     setNotifying(false)
     if (res.error) return showToast('❌ ' + res.error, 'error')
     showToast(`📣 ส่งแจ้งเตือนสำเร็จ ${res.notified}/${res.total} คน`)
   }
 
+  const paidMembers   = summaries.filter(s => s.is_paid)
+  const unpaidMembers = summaries.filter(s => !s.is_paid)
+
   return (
-    <Card style={{ marginBottom: 12, cursor: 'pointer', transition: 'border-color 0.2s' }}
-      onClick={() => setExpanded(e => !e)}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-            <span style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 15 }}>{order.order_number}</span>
-            <StatusBadge status={order.status} />
+    <div style={{
+      background: '#0f0f23',
+      border: `1px solid ${expanded ? '#3a3a6a' : '#1a1a3e'}`,
+      borderRadius: 16, marginBottom: 12,
+      transition: 'border-color 0.2s',
+      overflow: 'hidden',
+    }}>
+      {/* ── Header (กดได้) ── */}
+      <div
+        onClick={handleToggle}
+        style={{ padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <span style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 15 }}>{order.order_number}</span>
+              <StatusBadge status={order.status} />
+            </div>
+            <div style={{ color: '#666', fontSize: 12 }}>
+              📅 {order.order_date} · ⏰ กำหนด {order.deadline} · 🚚 ฿{order.delivery_fee}
+            </div>
+            {order.note && <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>💬 {order.note}</div>}
           </div>
-          <div style={{ color: '#666', fontSize: 12 }}>
-            📅 {order.order_date} · ⏰ กำหนด {order.deadline} · 🚚 ฿{order.delivery_fee}
-          </div>
-          {order.note && <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>💬 {order.note}</div>}
-        </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 16 }}>฿{totalAmt.toLocaleString()}</div>
-          <div style={{ color: paid === total ? '#10b981' : '#888', fontSize: 12 }}>{paid}/{total} จ่าย</div>
-        </div>
-      </div>
-
-      <ProgressBar value={paid} max={total} color={paid === total ? '#10b981' : '#e2ff5d'} />
-
-      {expanded && (
-        <div style={{ marginTop: 16, borderTop: '1px solid #1a1a3e', paddingTop: 16 }} onClick={e => e.stopPropagation()}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ color: '#aaa', fontSize: 13 }}>รายละเอียดการจ่าย</span>
-            {order.status !== 'completed' && (
-              <Btn variant="line" size="sm" onClick={handleNotify} loading={notifying}>
-                📣 แจ้งเตือน LINE
-              </Btn>
-            )}
-          </div>
-          {order.memberSummaries?.map(s => (
-            <div key={s.member_id} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px', borderRadius: 10, marginBottom: 6,
-              background: s.is_paid ? '#10b98110' : '#12122a',
-              border: `1px solid ${s.is_paid ? '#10b98130' : '#1a1a3e'}`,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 20 }}>{s.avatar_emoji}</span>
-                <div>
-                  <div style={{ color: '#e2e2ff', fontSize: 14, fontWeight: 500 }}>{s.member_name}</div>
-                  <div style={{ color: '#555', fontSize: 11 }}>
-                    น้ำ ฿{s.items_total} + ส่ง ฿{s.delivery_share}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: '#e2ff5d', fontWeight: 700 }}>฿{s.total_due}</span>
-                {s.is_paid ? (
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ background: '#10b98122', color: '#10b981', padding: '3px 9px', borderRadius: 20, fontSize: 12 }}>✓ จ่ายแล้ว</span>
-                    {s.slip_url && (
-                      <a href={s.slip_url} target="_blank" rel="noreferrer"
-                        style={{ display: 'block', color: '#6366f1', fontSize: 11, marginTop: 2 }}>ดูสลิป</a>
-                    )}
-                  </div>
-                ) : (
-                  <span style={{ background: '#ef444422', color: '#f87171', padding: '3px 9px', borderRadius: 20, fontSize: 12 }}>ยังไม่จ่าย</span>
-                )}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 16 }}>฿{totalAmt.toLocaleString()}</div>
+              <div style={{ color: paid === total && total > 0 ? '#10b981' : '#888', fontSize: 12 }}>
+                {paid}/{total} จ่ายแล้ว
               </div>
             </div>
-          ))}
-
-          {/* ลิงก์หน้าจ่ายเงิน */}
-          <div style={{ marginTop: 12, padding: 12, background: '#12122a', borderRadius: 10, fontSize: 12, color: '#666' }}>
-            🔗 ลิงก์หน้าจ่ายเงิน:{' '}
-            <span style={{ color: '#818cf8' }}>
-              {process.env.NEXT_PUBLIC_APP_URL || 'https://drinkpay.vercel.app'}/pay/{order.id}
+            <span style={{ color: '#444', fontSize: 18, marginTop: 2 }}>
+              {expanded ? '▲' : '▼'}
             </span>
           </div>
         </div>
+
+        {/* Progress bar */}
+        <ProgressBar value={paid} max={total} color={paid === total && total > 0 ? '#10b981' : '#e2ff5d'} />
+
+        {/* Avatar pills preview */}
+        {!expanded && summaries.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 10, flexWrap: 'wrap' }}>
+            {summaries.map(s => (
+              <span key={s.member_id} style={{
+                fontSize: 11, padding: '3px 8px', borderRadius: 20,
+                background: s.is_paid ? '#10b98122' : '#ef444415',
+                color: s.is_paid ? '#10b981' : '#f87171',
+                border: `1px solid ${s.is_paid ? '#10b98130' : '#ef444430'}`,
+              }}>
+                {s.avatar_emoji} {s.member_name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Expanded Detail ── */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid #1a1a3e', padding: '16px' }} onClick={e => e.stopPropagation()}>
+
+          {loadingDetail ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: '#666', fontSize: 13 }}>
+              <span className="spinner" style={{ display: 'inline-block', marginRight: 8 }} />
+              กำลังโหลด...
+            </div>
+          ) : (
+            <>
+              {/* Action bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <span style={{ color: '#aaa', fontSize: 13 }}>
+                  ✅ จ่ายแล้ว {paid} คน · ⏳ ยังไม่จ่าย {unpaidMembers.length} คน
+                </span>
+                {order.status !== 'completed' && (
+                  <Btn variant="line" size="sm" onClick={handleNotify} loading={notifying}>
+                    📣 เตือน LINE
+                  </Btn>
+                )}
+              </div>
+
+              {/* ยังไม่จ่าย */}
+              {unpaidMembers.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ color: '#f87171', fontSize: 12, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                    ยังไม่จ่าย ({unpaidMembers.length} คน)
+                  </div>
+                  {unpaidMembers.map(s => (
+                    <MemberRow key={s.member_id} s={s} orderId={order.id} />
+                  ))}
+                </div>
+              )}
+
+              {/* จ่ายแล้ว */}
+              {paidMembers.length > 0 && (
+                <div>
+                  <div style={{ color: '#10b981', fontSize: 12, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                    จ่ายแล้ว ({paidMembers.length} คน)
+                  </div>
+                  {paidMembers.map(s => (
+                    <MemberRow key={s.member_id} s={s} orderId={order.id} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
-    </Card>
+    </div>
+  )
+}
+
+// ── Row สมาชิกแต่ละคน ──────────────────────────────────────────────────────────
+function MemberRow({ s, orderId }) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  const payLink = `${appUrl}/pay/${orderId}?token=${s.access_token}`
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '10px 12px', borderRadius: 10, marginBottom: 6,
+      background: s.is_paid ? '#10b98108' : '#12122a',
+      border: `1px solid ${s.is_paid ? '#10b98125' : '#1e1e3a'}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 22 }}>{s.avatar_emoji}</span>
+        <div>
+          <div style={{ color: '#e2e2ff', fontSize: 14, fontWeight: 500 }}>{s.member_name}</div>
+          <div style={{ color: '#555', fontSize: 11 }}>
+            น้ำ ฿{s.items_total} + ส่ง ฿{s.delivery_share}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <span style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 15 }}>฿{s.total_due}</span>
+        {s.is_paid ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <span style={{
+              background: '#10b98122', color: '#10b981',
+              padding: '2px 9px', borderRadius: 20, fontSize: 12
+            }}>✓ จ่ายแล้ว</span>
+            {s.slip_url && (
+              <a href={s.slip_url} target="_blank" rel="noreferrer"
+                style={{ color: '#818cf8', fontSize: 11 }}>🖼 ดูสลิป</a>
+            )}
+            {s.paid_at && (
+              <span style={{ color: '#444', fontSize: 10 }}>
+                {new Date(s.paid_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <span style={{
+              background: '#ef444415', color: '#f87171',
+              padding: '2px 9px', borderRadius: 20, fontSize: 12
+            }}>⏳ ยังไม่จ่าย</span>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(payLink); }}
+              title="คัดลอกลิงก์"
+              style={{
+                background: 'none', border: 'none', color: '#6366f1',
+                fontSize: 11, cursor: 'pointer', padding: 0,
+              }}
+            >
+              📋 คัดลอกลิงก์
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -544,8 +660,7 @@ export default function AdminPage() {
                   <Empty icon="🧋" message="ยังไม่มีออเดอร์ กดสร้างออเดอร์แรกได้เลย!" />
                 ) : (
                   orders.map(o => (
-                    <OrderCard key={o.id} order={o} members={members}
-                      onRefresh={loadData} showToast={showToast} />
+                    <OrderCard key={o.id} order={o} showToast={showToast} />
                   ))
                 )}
               </div>
