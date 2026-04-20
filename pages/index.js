@@ -219,7 +219,7 @@ function OrderCard({ order, showToast }) {
     if (!opening) return
 
     setLoadingDetail(true)
-    const res = await fetch(`/api/orders/${order.id}/pay`, {
+    const res = await fetch(`/api/orders/${order.id}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}` },
     }).then(r => r.json())
     setLoadingDetail(false)
