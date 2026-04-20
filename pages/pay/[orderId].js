@@ -31,7 +31,7 @@ export default function PayPage() {
       return
     }
 
-    fetch(`/api/orders/${oid}/pay?memberToken=${t || ''}`)
+    fetch(`/api/orders/${oid}?memberToken=${t || ''}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) setError(d.error)
@@ -63,7 +63,7 @@ export default function PayPage() {
     reader.onload = async (ev) => {
       const base64 = ev.target.result.split(',')[1]
 
-      const res = await fetch(`/api/orders/${orderId}/pay`, {
+      const res = await fetch(`/api/orders/${orderId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
