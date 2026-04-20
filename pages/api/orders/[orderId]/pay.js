@@ -1,6 +1,7 @@
 // pages/api/orders/[orderId]/pay.js
 import { getServiceClient } from '../../../../lib/supabase'
 import { pushToGroup, buildCompletedMessage } from '../../../../lib/line'
+import { uploadToDrive } from '../../../../lib/gdrive'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '5mb' } },
@@ -77,26 +78,25 @@ export default async function handler(req, res) {
 
     if (existing) return res.status(409).json({ error: 'จ่ายแล้ว' })
 
-    // Upload สลิปไป Supabase Storage
-    const fileExt = image_filename?.split('.').pop() || 'jpg'
-    const fileName = `${orderId}/${member.id}_${Date.now()}.${fileExt}`
+    // อัปโหลดสลิปขึ้น Google Drive
+    const fileExt = image_filename?.split('.').pop()?.toLowerCase() || 'jpg'
+    const mimeType = fileExt === 'png' ? 'image/png' : 'image/jpeg'
+    const driveFilename = `slip_${orderId}_${member.id}_${Date.now()}.${fileExt}`
     const fileBuffer = Buffer.from(image_base64, 'base64')
 
-    const { error: uploadError } = await db.storage
-      .from('slips')
-      .upload(fileName, fileBuffer, {
-        contentType: `image/${fileExt}`,
-        upsert: false,
+    let slip_url, slip_filename
+    try {
+      const driveResult = await uploadToDrive({
+        buffer: fileBuffer,
+        filename: driveFilename,
+        mimeType,
       })
-
-    if (uploadError) {
-      console.error('Storage upload error:', uploadError)
-      return res.status(500).json({ error: 'อัปโหลดรูปไม่สำเร็จ: ' + uploadError.message })
+      slip_url = driveResult.viewUrl
+      slip_filename = driveResult.fileName
+    } catch (err) {
+      console.error('Google Drive upload error:', err)
+      return res.status(500).json({ error: 'อัปโหลดสลิปไม่สำเร็จ: ' + err.message })
     }
-
-    // Public URL
-    const { data: urlData } = db.storage.from('slips').getPublicUrl(fileName)
-    const slip_url = urlData.publicUrl
 
     // ดึงยอดที่ต้องจ่าย
     const { data: summary } = await db
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
       member_id: member.id,
       amount: summary?.total_due || 0,
       slip_url,
-      slip_filename: fileName,
+      slip_filename,
     })
 
     if (payErr) return res.status(500).json({ error: payErr.message })
