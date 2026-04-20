@@ -85,30 +85,21 @@ export default async function handler(req, res) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://drinkpay.vercel.app'
     const lineMsg = buildNewOrderMessage({ order, memberSummaries: summary || [], appUrl })
 
-    // 5. ส่งแจ้งเตือน LINE
-    const lineResults = await Promise.allSettled([
-      // ส่ง group
-      pushToGroup(lineMsg),
-      // ส่งรายคน (เฉพาะคนที่มี line_user_id)
-      ...( summary || [])
-        .filter((s) => s.line_user_id)
-        .map((s) =>
-          pushToGroup(lineMsg).then(() => ({ ok: true, userId: s.line_user_id }))
-        ),
-    ])
+    // 5. ส่งแจ้งเตือน LINE — ส่ง Group ครั้งเดียวเท่านั้น
+    const lineResult = await pushToGroup(lineMsg)
 
     // 6. Log notification
     await db.from('notification_logs').insert({
       order_id: order.id,
       type: 'new_order',
-      sent_to: 'group + individuals',
+      sent_to: 'group',
       message_preview: lineMsg.text?.slice(0, 200),
-      success: lineResults[0].status === 'fulfilled' && lineResults[0].value?.ok,
+      success: lineResult.ok,
     })
 
     return res.status(201).json({
       order: { ...order, memberSummaries: summary },
-      lineNotified: lineResults[0].status === 'fulfilled',
+      lineNotified: lineResult.ok,
     })
   }
 
