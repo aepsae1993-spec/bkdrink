@@ -70,6 +70,7 @@ export default function PayPage() {
 
   const member       = data?.currentMember
   const order        = data?.order
+  const memberItems  = data?.memberItems||[]
   const allSummaries = data?.memberSummaries||[]
   const alreadyPaid  = member?.is_paid
   const paidCount    = allSummaries.filter(s=>s.is_paid).length
@@ -133,7 +134,25 @@ export default function PayPage() {
                 }}>
                   <div style={{fontSize:36,marginBottom:6}}>{member.avatar_emoji}</div>
                   <div style={{color:S.text,fontWeight:700,fontSize:18,marginBottom:2}}>{member.member_name}</div>
-                  <div style={{color:S.dim,fontSize:12,marginBottom:14}}>น้ำ ฿{member.items_total} + ค่าส่ง ฿{member.delivery_share}</div>
+                  {/* รายการเมนูที่สั่ง */}
+                  <div style={{marginBottom:14}}>
+                    {memberItems.length>0?(
+                      <div style={{background:'#12122a',borderRadius:10,padding:'10px 14px',marginBottom:8}}>
+                        {memberItems.map((item,i)=>(
+                          <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:i<memberItems.length-1?'1px solid #1a1a3e':'none'}}>
+                            <span style={{color:S.text,fontSize:13}}>{item.emoji} {item.name}{item.quantity>1?' x'+item.quantity:''}</span>
+                            <span style={{color:S.accent,fontSize:13,fontWeight:600}}>฿{item.subtotal}</span>
+                          </div>
+                        ))}
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:6,marginTop:4,borderTop:'1px solid #2a2a5a'}}>
+                          <span style={{color:S.muted,fontSize:12}}>🚚 ค่าส่ง (หาร)</span>
+                          <span style={{color:S.muted,fontSize:12}}>฿{member.delivery_share}</span>
+                        </div>
+                      </div>
+                    ):(
+                      <div style={{color:S.dim,fontSize:12}}>น้ำ ฿{member.items_total} + ค่าส่ง ฿{member.delivery_share}</div>
+                    )}
+                  </div>
                   {alreadyPaid||done?(
                     <>
                       <div style={{fontSize:40,marginBottom:6}}>✅</div>
