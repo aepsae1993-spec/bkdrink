@@ -30,14 +30,34 @@ export default async function handler(req, res) {
       .eq('order_id', orderId)
 
     let memberData = null
+    let memberItems = []
+
     if (memberToken) {
       memberData = summary?.find((s) => s.access_token === memberToken) || null
+
+      // ดึงรายการเมนูที่ member คนนี้สั่ง
+      if (memberData) {
+        const { data: items } = await db
+          .from('order_items')
+          .select('quantity, unit_price, menu_items(name, emoji)')
+          .eq('order_id', orderId)
+          .eq('member_id', memberData.member_id)
+
+        memberItems = (items || []).map(i => ({
+          name:       i.menu_items?.name || 'เมนู',
+          emoji:      i.menu_items?.emoji || '🧋',
+          quantity:   i.quantity,
+          unit_price: i.unit_price,
+          subtotal:   i.quantity * i.unit_price,
+        }))
+      }
     }
 
     return res.status(200).json({
       order,
       memberSummaries: summary || [],
       currentMember: memberData,
+      memberItems,
     })
   }
 
