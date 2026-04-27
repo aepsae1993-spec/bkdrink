@@ -65,7 +65,9 @@ export default function PayPage() {
       }).then(r=>r.json())
       setUploading(false)
       if(res.error){
-        setToast({msg:'❌ '+res.error,type:'error'})
+        const debugMsg = res.debug ? '\n[DEBUG] '+JSON.stringify(res.debug).slice(0,200) : ''
+        setToast({msg:'❌ '+res.error+debugMsg,type:'error'})
+        console.log('Slip error full response:', res)
       } else {
         setDone(true)
         if(res.slipInfo)setVerifiedSlip(res.slipInfo)
