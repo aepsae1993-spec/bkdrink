@@ -3,6 +3,7 @@
 import { getServiceClient } from '../../../lib/supabase'
 import { pushToGroup, buildCompletedMessage } from '../../../lib/line'
 import { uploadViaAppsScript } from '../../../lib/appsscript'
+import { verifySlipWithEasySlip, checkSlipAgainstOrder } from '../../../lib/easyslip'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '5mb' } },
@@ -102,12 +103,47 @@ export default async function handler(req, res) {
 
     if (existing) return res.status(409).json({ error: 'จ่ายแล้ว' })
 
-    // อัปโหลดผ่าน Google Apps Script → Google Drive
+    // ดึงยอดที่ต้องจ่าย (ดึงก่อนเพื่อใช้ตรวจสลิป)
+    const { data: summary } = await db
+      .from('order_member_summary')
+      .select('total_due')
+      .eq('order_id', orderId)
+      .eq('member_id', member.id)
+      .single()
+
+    const expectedAmount = summary?.total_due || 0
     const fileExt    = (image_filename?.split('.').pop() || 'jpg').toLowerCase()
     const mimeType   = fileExt === 'png' ? 'image/png' : 'image/jpeg'
-    const filename   = `slip_${orderId}_${member.id}_${Date.now()}.${fileExt}`
     const fileBuffer = Buffer.from(image_base64, 'base64')
 
+    // ─── ตรวจสอบสลิปกับ EasySlip API ──────────────────────────────────────
+    let slipInfo = null
+    try {
+      const slipResult = await verifySlipWithEasySlip({ buffer: fileBuffer, mimeType })
+      const check = checkSlipAgainstOrder({ slipResult, expectedAmount })
+
+      if (!check.approved) {
+        return res.status(400).json({
+          error: '❌ ตรวจสอบสลิปไม่ผ่าน: ' + check.reason,
+          slipInfo: slipResult,
+        })
+      }
+
+      slipInfo = {
+        amount:    slipResult.amount,
+        sender:    slipResult.sender,
+        receiver:  slipResult.receiver,
+        transRef:  slipResult.transRef,
+        date:      slipResult.date,
+      }
+    } catch (err) {
+      console.error('EasySlip error:', err)
+      // ถ้า EasySlip down ให้ผ่านไปก่อน (admin มาตรวจเอง)
+      slipInfo = { error: err.message, fallback: true }
+    }
+
+    // ─── อัปโหลดสลิปขึ้น Google Drive ────────────────────────────────────
+    const filename = `slip_${orderId}_${member.id}_${Date.now()}.${fileExt}`
     let slip_url, slip_filename
     try {
       const result  = await uploadViaAppsScript({ buffer: fileBuffer, filename, mimeType })
@@ -118,19 +154,11 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'อัปโหลดสลิปไม่สำเร็จ: ' + err.message })
     }
 
-    // ดึงยอดที่ต้องจ่าย
-    const { data: summary } = await db
-      .from('order_member_summary')
-      .select('total_due')
-      .eq('order_id', orderId)
-      .eq('member_id', member.id)
-      .single()
-
     // บันทึก payment
     const { error: payErr } = await db.from('payments').insert({
       order_id: orderId,
       member_id: member.id,
-      amount: summary?.total_due || 0,
+      amount: expectedAmount,
       slip_url,
       slip_filename,
     })
@@ -151,7 +179,7 @@ export default async function handler(req, res) {
       await pushToGroup(buildCompletedMessage({ order: orderData }))
     }
 
-    return res.status(200).json({ success: true, slip_url, allPaid })
+    return res.status(200).json({ success: true, slip_url, allPaid, slipInfo })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
