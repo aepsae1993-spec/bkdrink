@@ -29,6 +29,7 @@ export default function PayPage() {
   const [file,setFile]         = useState(null)
   const [preview,setPreview]   = useState(null)
   const [done,setDone]         = useState(false)
+  const [verifiedSlip,setVerifiedSlip] = useState(null)
   const [toast,setToast]       = useState(null)
   const [token,setToken]       = useState(null)
   const [orderId,setOrderId]   = useState(null)
@@ -63,8 +64,13 @@ export default function PayPage() {
         body:JSON.stringify({member_token:token,image_base64:base64,image_filename:file.name}),
       }).then(r=>r.json())
       setUploading(false)
-      if(res.error){setToast({msg:'❌ '+res.error,type:'error'})}
-      else{setDone(true);setToast({msg:res.allPaid?'🎉 ทุกคนจ่ายครบแล้ว!':'✅ ยืนยันการจ่ายเรียบร้อย!'})}
+      if(res.error){
+        setToast({msg:'❌ '+res.error,type:'error'})
+      } else {
+        setDone(true)
+        if(res.slipInfo)setVerifiedSlip(res.slipInfo)
+        setToast({msg:res.allPaid?'🎉 ทุกคนจ่ายครบแล้ว!':'✅ ตรวจสอบสลิปและบันทึกเรียบร้อย!'})
+      }
     }
   }
 
@@ -176,6 +182,44 @@ export default function PayPage() {
               )}
 
               {/* ── อัปโหลดสลิป ── */}
+              {/* ── ข้อมูลสลิปที่ตรวจสอบเจอ ── */}
+              {verifiedSlip&&!verifiedSlip.fallback&&(
+                <div style={{
+                  background:'linear-gradient(135deg,#0a1a14,#0a2418)',
+                  border:'1px solid #10b98140',
+                  borderRadius:14,padding:16,marginBottom:16,
+                }}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+                    <span style={{fontSize:16}}>🔍</span>
+                    <span style={{color:S.green,fontWeight:600,fontSize:13}}>ตรวจสอบสลิปกับธนาคารเรียบร้อย</span>
+                  </div>
+                  {verifiedSlip.amount&&(
+                    <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}>
+                      <span style={{color:S.muted}}>ยอดในสลิป</span>
+                      <span style={{color:S.accent,fontWeight:700}}>฿{verifiedSlip.amount}</span>
+                    </div>
+                  )}
+                  {verifiedSlip.sender&&(
+                    <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}>
+                      <span style={{color:S.muted}}>ผู้โอน</span>
+                      <span style={{color:S.text}}>{verifiedSlip.sender}</span>
+                    </div>
+                  )}
+                  {verifiedSlip.receiver&&(
+                    <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}>
+                      <span style={{color:S.muted}}>ผู้รับ</span>
+                      <span style={{color:S.text}}>{verifiedSlip.receiver}</span>
+                    </div>
+                  )}
+                  {verifiedSlip.transRef&&(
+                    <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:11}}>
+                      <span style={{color:S.dim}}>Ref</span>
+                      <span style={{color:S.dim,fontFamily:'monospace'}}>{verifiedSlip.transRef}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {member&&!alreadyPaid&&!done&&(
                 <div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:16,padding:18,marginBottom:16}}>
                   <p style={{color:S.muted,fontSize:13,marginBottom:12}}>📎 อัปโหลดสลิปเพื่อยืนยันการจ่าย</p>
