@@ -153,13 +153,19 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'อัปโหลดสลิปไม่สำเร็จ: ' + err.message })
     }
 
-    // บันทึก payment
+    // บันทึก payment พร้อมข้อมูลสลิป
     const { error: payErr } = await db.from('payments').insert({
       order_id: orderId,
       member_id: member.id,
       amount: expectedAmount,
       slip_url,
       slip_filename,
+      slip_amount:    slipInfo?.amount    || null,
+      slip_sender:    slipInfo?.sender    || null,
+      slip_receiver:  slipInfo?.receiver  || null,
+      slip_trans_ref: slipInfo?.transRef  || null,
+      slip_date:      slipInfo?.date      || null,
+      slip_verified:  slipInfo && !slipInfo.fallback ? true : false,
     })
 
     if (payErr) return res.status(500).json({ error: payErr.message })
