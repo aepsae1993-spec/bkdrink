@@ -166,7 +166,7 @@ export default function MePage() {
                       <div style={{color:S.dim,fontSize:11,marginTop:3}}>📅 {o.order_date}</div>
                       {o.paid_at&&(
                         <div style={{color:S.dim,fontSize:11,marginTop:1}}>
-                          ✓ จ่ายเมื่อ {new Date(o.paid_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}
+                          ✓ จ่ายเมื่อ {new Date(o.paid_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Bangkok'})}
                         </div>
                       )}
                     </div>
