@@ -121,22 +121,12 @@ export default async function handler(req, res) {
     try {
       const slipResult = await verifySlipWithEasySlip({ buffer: fileBuffer, mimeType })
 
-      console.log('[Slip Check] result:', JSON.stringify(slipResult).slice(0, 500))
-
       if (!slipResult.success) {
-        // DEBUG: แสดง error จริงเพื่อหาสาเหตุ
-        return res.status(400).json({
-          error: 'โปรดอัพสลิปที่ถูกต้อง',
-          debug: slipResult.error,
-          rawDebug: slipResult.raw,
-        })
+        return res.status(400).json({ error: 'โปรดอัพสลิปที่ถูกต้อง' })
       }
 
       if (slipResult.amount < expectedAmount) {
-        return res.status(400).json({
-          error: 'กรุณาโอนให้ครบ',
-          debug: `ยอดในสลิป: ฿${slipResult.amount} / ต้องจ่าย: ฿${expectedAmount}`,
-        })
+        return res.status(400).json({ error: 'กรุณาโอนให้ครบ' })
       }
 
       slipInfo = {
