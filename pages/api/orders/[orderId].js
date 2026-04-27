@@ -120,13 +120,15 @@ export default async function handler(req, res) {
     let slipInfo = null
     try {
       const slipResult = await verifySlipWithEasySlip({ buffer: fileBuffer, mimeType })
-      const check = checkSlipAgainstOrder({ slipResult, expectedAmount })
 
-      if (!check.approved) {
-        return res.status(400).json({
-          error: '❌ ตรวจสอบสลิปไม่ผ่าน: ' + check.reason,
-          slipInfo: slipResult,
-        })
+      // ไม่ใช่สลิป (อ่านไม่ออก / เป็นรูปอื่น)
+      if (!slipResult.success) {
+        return res.status(400).json({ error: 'โปรดอัพสลิปที่ถูกต้อง' })
+      }
+
+      // ยอดน้อยกว่าที่ต้องจ่าย
+      if (slipResult.amount < expectedAmount) {
+        return res.status(400).json({ error: 'กรุณาโอนให้ครบ' })
       }
 
       slipInfo = {
