@@ -630,6 +630,168 @@ function MenuRow({ item, isEditing, onEdit, onSave, onCancel }) {
   )
 }
 
+// ─── History Tab — ประวัติการจ่ายเงินทุกคน ─────────────────────────────────────
+function HistoryTab({ members, showToast }) {
+  const [payments, setPayments]     = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [filterMember, setFilter]   = useState('all') // 'all' หรือ member_id
+  const [search, setSearch]         = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    API('/api/payments')
+      .then(d => { if (!d.error) setPayments(d) })
+      .finally(() => setLoading(false))
+  }, [])
+
+  // filter
+  const filtered = payments.filter(p => {
+    if (filterMember !== 'all' && p.member_name !== filterMember) return false
+    if (search) {
+      const s = search.toLowerCase()
+      return (
+        p.member_name?.toLowerCase().includes(s) ||
+        p.order_number?.toLowerCase().includes(s) ||
+        p.slip_sender?.toLowerCase().includes(s) ||
+        p.slip_receiver?.toLowerCase().includes(s) ||
+        p.slip_trans_ref?.toLowerCase().includes(s)
+      )
+    }
+    return true
+  })
+
+  const totalAmount = filtered.reduce((s, p) => s + (p.amount || 0), 0)
+
+  if (loading) return <Loading />
+
+  return (
+    <>
+      <SectionHeader title={`ประวัติการจ่ายเงิน (${payments.length})`} />
+
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 140, background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 12, padding: 12 }}>
+          <div style={{ color: '#666', fontSize: 11 }}>รวมยอดจ่าย</div>
+          <div style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 20 }}>฿{totalAmount.toLocaleString()}</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 140, background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 12, padding: 12 }}>
+          <div style={{ color: '#666', fontSize: 11 }}>จำนวนรายการ</div>
+          <div style={{ color: '#e2e2ff', fontWeight: 700, fontSize: 20 }}>{filtered.length}</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 140, background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 12, padding: 12 }}>
+          <div style={{ color: '#666', fontSize: 11 }}>ผ่าน EasySlip</div>
+          <div style={{ color: '#10b981', fontWeight: 700, fontSize: 20 }}>{filtered.filter(p => p.slip_verified).length}</div>
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 ค้นหา ชื่อ / ออเดอร์ / Ref..."
+          style={{
+            flex: 1, minWidth: 180, padding: '9px 14px', background: '#1a1a3e',
+            border: '1px solid #2a2a5a', borderRadius: 10, color: '#e2e2ff',
+            fontFamily: "'Sarabun', sans-serif", fontSize: 13,
+          }}
+        />
+        <select
+          value={filterMember}
+          onChange={e => setFilter(e.target.value)}
+          style={{
+            padding: '9px 14px', background: '#1a1a3e', border: '1px solid #2a2a5a',
+            borderRadius: 10, color: '#e2e2ff', fontFamily: "'Sarabun', sans-serif", fontSize: 13,
+          }}
+        >
+          <option value="all">ทุกคน</option>
+          {members.map(m => (
+            <option key={m.id} value={m.name}>{m.avatar_emoji} {m.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Table — Desktop */}
+      <div style={{ background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
+            <thead>
+              <tr style={{ background: '#080818' }}>
+                <th style={thStyle}>เวลา</th>
+                <th style={thStyle}>คน</th>
+                <th style={thStyle}>ออเดอร์</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>ยอด</th>
+                <th style={thStyle}>ผู้โอน</th>
+                <th style={thStyle}>ผู้รับ</th>
+                <th style={thStyle}>Ref ID</th>
+                <th style={thStyle}>สลิป</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: '#555' }}>ไม่มีข้อมูล</td></tr>
+              ) : (
+                filtered.map(p => (
+                  <tr key={p.id} style={{ borderTop: '1px solid #12122a' }}>
+                    <td style={tdStyle}>
+                      <div style={{ color: '#aaa', fontSize: 12 }}>
+                        {new Date(p.confirmed_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}
+                      </div>
+                      <div style={{ color: '#555', fontSize: 11 }}>
+                        {new Date(p.confirmed_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </td>
+                    <td style={tdStyle}>
+                      {p.member_emoji} <span style={{ color: '#e2e2ff' }}>{p.member_name}</span>
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ color: '#e2ff5d', fontWeight: 600, fontSize: 12 }}>{p.order_number}</div>
+                      <div style={{ color: '#555', fontSize: 11 }}>{p.order_date}</div>
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <div style={{ color: '#e2ff5d', fontWeight: 700 }}>฿{p.amount}</div>
+                      {p.slip_amount && p.slip_amount !== p.amount && (
+                        <div style={{ color: '#10b981', fontSize: 11 }}>โอน ฿{p.slip_amount}</div>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={{ color: '#aaa', fontSize: 12 }}>{p.slip_sender || '-'}</span>
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={{ color: '#aaa', fontSize: 12 }}>{p.slip_receiver || '-'}</span>
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>
+                        {p.slip_trans_ref || '-'}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>
+                      {p.slip_url ? (
+                        <a href={p.slip_url} target="_blank" rel="noreferrer"
+                          style={{ color: '#818cf8', fontSize: 12 }}>🖼 ดู</a>
+                      ) : '-'}
+                      {p.slip_verified && <span style={{ color: '#10b981', fontSize: 11, marginLeft: 4 }}>✓</span>}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const thStyle = {
+  textAlign: 'left', padding: '12px 14px',
+  color: '#666', fontSize: 11, fontWeight: 500,
+  borderBottom: '1px solid #1a1a3e', whiteSpace: 'nowrap',
+}
+const tdStyle = {
+  padding: '10px 14px', verticalAlign: 'top', whiteSpace: 'nowrap',
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const [token, setToken] = useState(null)
@@ -669,6 +831,7 @@ export default function AdminPage() {
 
   const navItems = [
     { key: 'orders', label: 'ออเดอร์', icon: '🧋' },
+    { key: 'history', label: 'ประวัติ', icon: '📜' },
     { key: 'members', label: 'สมาชิก', icon: '👥' },
     { key: 'settings', label: 'ตั้งค่า', icon: '⚙️' },
   ]
@@ -733,6 +896,12 @@ export default function AdminPage() {
                       onDeleted={id => setOrders(prev => prev.filter(o => o.id !== id))} />
                   ))
                 )}
+              </div>
+            )}
+
+            {tab === 'history' && (
+              <div className="animate-fadeup">
+                <HistoryTab members={members} showToast={showToast} />
               </div>
             )}
 
