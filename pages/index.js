@@ -457,7 +457,7 @@ function MemberRow({ s, orderId }) {
             )}
             {s.paid_at && (
               <span style={{ color: '#444', fontSize: 10 }}>
-                {new Date(s.paid_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                {new Date(s.paid_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Bangkok' })}
               </span>
             )}
           </div>
@@ -735,11 +735,16 @@ function HistoryTab({ members, showToast }) {
                   <tr key={p.id} style={{ borderTop: '1px solid #12122a' }}>
                     <td style={tdStyle}>
                       <div style={{ color: '#aaa', fontSize: 12 }}>
-                        {new Date(p.confirmed_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}
+                        {new Date(p.confirmed_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', timeZone: 'Asia/Bangkok' })}
                       </div>
                       <div style={{ color: '#555', fontSize: 11 }}>
-                        {new Date(p.confirmed_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(p.confirmed_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
                       </div>
+                      {p.slip_date && (
+                        <div style={{ color: '#666', fontSize: 10, marginTop: 2 }} title="เวลาบนสลิป">
+                          📄 {new Date(p.slip_date).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
+                        </div>
+                      )}
                     </td>
                     <td style={tdStyle}>
                       {p.member_emoji} <span style={{ color: '#e2e2ff' }}>{p.member_name}</span>
