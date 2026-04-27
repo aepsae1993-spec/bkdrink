@@ -711,80 +711,110 @@ function HistoryTab({ members, showToast }) {
         </select>
       </div>
 
-      {/* Table — Desktop */}
-      <div style={{ background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
-            <thead>
-              <tr style={{ background: '#080818' }}>
-                <th style={thStyle}>เวลา</th>
-                <th style={thStyle}>คน</th>
-                <th style={thStyle}>ออเดอร์</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>ยอด</th>
-                <th style={thStyle}>ผู้โอน</th>
-                <th style={thStyle}>ผู้รับ</th>
-                <th style={thStyle}>Ref ID</th>
-                <th style={thStyle}>สลิป</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: '#555' }}>ไม่มีข้อมูล</td></tr>
-              ) : (
-                filtered.map(p => (
-                  <tr key={p.id} style={{ borderTop: '1px solid #12122a' }}>
-                    <td style={tdStyle}>
-                      <div style={{ color: '#aaa', fontSize: 12 }}>
-                        {new Date(p.confirmed_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', timeZone: 'Asia/Bangkok' })}
-                      </div>
-                      <div style={{ color: '#555', fontSize: 11 }}>
-                        {new Date(p.confirmed_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
-                      </div>
-                      {p.slip_date && (
-                        <div style={{ color: '#666', fontSize: 10, marginTop: 2 }} title="เวลาบนสลิป">
-                          📄 {new Date(p.slip_date).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
-                        </div>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {p.member_emoji} <span style={{ color: '#e2e2ff' }}>{p.member_name}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <div style={{ color: '#e2ff5d', fontWeight: 600, fontSize: 12 }}>{p.order_number}</div>
-                      <div style={{ color: '#555', fontSize: 11 }}>{p.order_date}</div>
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <div style={{ color: '#e2ff5d', fontWeight: 700 }}>฿{p.amount}</div>
-                      {p.slip_amount && p.slip_amount !== p.amount && (
-                        <div style={{ color: '#10b981', fontSize: 11 }}>โอน ฿{p.slip_amount}</div>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ color: '#aaa', fontSize: 12 }}>{p.slip_sender || '-'}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ color: '#aaa', fontSize: 12 }}>{p.slip_receiver || '-'}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>
-                        {p.slip_trans_ref || '-'}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      {p.slip_url ? (
-                        <a href={p.slip_url} target="_blank" rel="noreferrer"
-                          style={{ color: '#818cf8', fontSize: 12 }}>🖼 ดู</a>
-                      ) : '-'}
-                      {p.slip_verified && <span style={{ color: '#10b981', fontSize: 11, marginLeft: 4 }}>✓</span>}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Payment Cards (กดเพื่อดูรายละเอียดเพิ่ม) */}
+      <div>
+        {filtered.length === 0 ? (
+          <Empty icon="📭" message="ยังไม่มีประวัติการจ่ายเงิน" />
+        ) : (
+          filtered.map(p => <PaymentCard key={p.id} p={p} />)
+        )}
       </div>
     </>
+  )
+}
+
+function PaymentCard({ p }) {
+  const [open, setOpen] = useState(false)
+  const date = new Date(p.confirmed_at)
+
+  return (
+    <div style={{
+      background: '#0f0f23', border: '1px solid #1a1a3e',
+      borderRadius: 12, marginBottom: 8, overflow: 'hidden',
+      transition: 'border-color 0.15s',
+    }}>
+      {/* แถวหลัก */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          padding: '12px 14px', cursor: 'pointer', userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}
+      >
+        {/* avatar + ชื่อ */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 18 }}>{p.member_emoji}</span>
+            <span style={{ color: '#e2e2ff', fontWeight: 600, fontSize: 14 }}>{p.member_name}</span>
+            {p.slip_verified && (
+              <span style={{ background: '#10b98122', color: '#10b981', padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 600 }}>
+                ✓ ตรวจแล้ว
+              </span>
+            )}
+          </div>
+          <div style={{ color: '#666', fontSize: 11, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: '#e2ff5d' }}>{p.order_number}</span>
+            <span>·</span>
+            <span>{date.toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}</span>
+          </div>
+        </div>
+
+        {/* ยอด */}
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ color: '#e2ff5d', fontWeight: 700, fontSize: 16 }}>฿{p.amount}</div>
+          {p.slip_amount && p.slip_amount !== p.amount && (
+            <div style={{ color: '#10b981', fontSize: 10 }}>โอน ฿{p.slip_amount}</div>
+          )}
+        </div>
+
+        <span style={{ color: '#444', fontSize: 14, marginLeft: 4 }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </div>
+
+      {/* รายละเอียดที่ขยาย */}
+      {open && (
+        <div style={{ borderTop: '1px solid #1a1a3e', padding: '12px 14px', background: '#080818' }}>
+          <Detail label="ผู้โอน"   value={p.slip_sender   || '— ไม่มีข้อมูลสลิป —'} />
+          <Detail label="ผู้รับ"   value={p.slip_receiver || '—'} />
+          <Detail label="Ref ID"  value={p.slip_trans_ref || '—'} mono />
+          {p.slip_date && (
+            <Detail
+              label="เวลาบนสลิป"
+              value={new Date(p.slip_date).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Bangkok' })}
+            />
+          )}
+          {p.slip_url && (
+            <div style={{ marginTop: 10 }}>
+              <a href={p.slip_url} target="_blank" rel="noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: '#1a1a3e', border: '1px solid #2a2a5a',
+                  color: '#818cf8', padding: '6px 14px', borderRadius: 8,
+                  fontSize: 13, textDecoration: 'none',
+                }}>
+                🖼 ดูสลิป
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Detail({ label, value, mono }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', gap: 12 }}>
+      <span style={{ color: '#666', fontSize: 12, flexShrink: 0 }}>{label}</span>
+      <span style={{
+        color: '#e2e2ff', fontSize: 12, textAlign: 'right',
+        fontFamily: mono ? 'monospace' : 'inherit',
+        wordBreak: 'break-all',
+      }}>
+        {value}
+      </span>
+    </div>
   )
 }
 
