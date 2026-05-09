@@ -25,6 +25,17 @@ export default async function handler(req, res) {
 
     if (error || !order) return res.status(404).json({ error: 'ไม่พบออเดอร์' })
 
+    // ดึงข้อมูลผู้รับเงินที่ผูกกับออเดอร์นี้ (ถ้ามี)
+    let recipient = null
+    if (order.recipient_id) {
+      const { data: r } = await db
+        .from('payment_recipients')
+        .select('id, display_name, recipient_name, account_number, bank, promptpay_id, note')
+        .eq('id', order.recipient_id)
+        .maybeSingle()
+      recipient = r || null
+    }
+
     const { data: summary } = await db
       .from('order_member_summary')
       .select('*')
@@ -59,6 +70,7 @@ export default async function handler(req, res) {
       memberSummaries: summary || [],
       currentMember: memberData,
       memberItems,
+      recipient,
     })
   }
 
@@ -116,14 +128,30 @@ export default async function handler(req, res) {
     const mimeType   = fileExt === 'png' ? 'image/png' : 'image/jpeg'
     const fileBuffer = Buffer.from(image_base64, 'base64')
 
-    // ─── ดึงตั้งค่าผู้รับเงิน (ถ้าตั้งไว้จะตรวจชื่อบนสลิปด้วย) ─────────────
-    const { data: paySettings } = await db
-      .from('payment_settings')
-      .select('recipient_name')
-      .eq('id', 1)
+    // ─── ดึงผู้รับเงินของออเดอร์นี้ (ถ้ามีจะตรวจชื่อบนสลิปด้วย) ────────────
+    const { data: orderForRecipient } = await db
+      .from('orders')
+      .select('recipient_id')
+      .eq('id', orderId)
       .maybeSingle()
 
-    const expectedReceiver = paySettings?.recipient_name?.trim() || null
+    let expectedReceiver = null
+    if (orderForRecipient?.recipient_id) {
+      const { data: rcp } = await db
+        .from('payment_recipients')
+        .select('recipient_name')
+        .eq('id', orderForRecipient.recipient_id)
+        .maybeSingle()
+      expectedReceiver = rcp?.recipient_name?.trim() || null
+    } else {
+      // fallback: ใช้ default recipient ถ้าออเดอร์เก่ายังไม่มี recipient_id
+      const { data: def } = await db
+        .from('payment_recipients')
+        .select('recipient_name')
+        .eq('is_default', true)
+        .maybeSingle()
+      expectedReceiver = def?.recipient_name?.trim() || null
+    }
 
     // ─── ตรวจสอบสลิปกับ EasySlip API ──────────────────────────────────────
     let slipInfo = null

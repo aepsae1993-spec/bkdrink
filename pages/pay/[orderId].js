@@ -33,7 +33,6 @@ export default function PayPage() {
   const [toast,setToast]       = useState(null)
   const [token,setToken]       = useState(null)
   const [orderId,setOrderId]   = useState(null)
-  const [paySettings,setPaySettings] = useState(null)
   const [copiedKey,setCopiedKey]     = useState(null)
 
   useEffect(()=>{
@@ -47,12 +46,9 @@ export default function PayPage() {
       .then(d=>{if(d.error)setError(d.error);else setData(d)})
       .catch(()=>setError('โหลดข้อมูลไม่สำเร็จ'))
       .finally(()=>setLoading(false))
-
-    fetch('/api/payment-settings')
-      .then(r=>r.json())
-      .then(d=>{ if(d && !d.error) setPaySettings(d) })
-      .catch(()=>{})
   },[])
+
+  const recipient = data?.recipient || null
 
   const copyText = (key, value) => {
     if(!value) return
@@ -196,20 +192,23 @@ export default function PayPage() {
                 </div>
               )}
 
-              {/* ── ข้อมูลบัญชีรับเงิน ── */}
-              {member&&!alreadyPaid&&!done&&paySettings&&(paySettings.recipient_name||paySettings.recipient_account_number||paySettings.promptpay_id)&&(
+              {/* ── ข้อมูลบัญชีรับเงิน (ของออเดอร์นี้) ── */}
+              {member&&!alreadyPaid&&!done&&recipient&&(recipient.recipient_name||recipient.account_number||recipient.promptpay_id)&&(
                 <div style={{
                   background:S.card,border:`1px solid ${S.border}`,
                   borderRadius:14,padding:16,marginBottom:16,
                 }}>
-                  <div style={{color:S.accent,fontSize:13,fontWeight:600,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
-                    💳 โอนเข้าบัญชีนี้
+                  <div style={{color:S.accent,fontSize:13,fontWeight:600,marginBottom:4,display:'flex',alignItems:'center',gap:6}}>
+                    💳 โอนเข้าบัญชี: {recipient.display_name}
+                  </div>
+                  <div style={{color:S.dim,fontSize:11,marginBottom:10}}>
+                    ออเดอร์นี้กำหนดให้จ่ายที่บัญชีนี้
                   </div>
                   {[
-                    ['recipient_name','ชื่อ',paySettings.recipient_name],
-                    ['recipient_account_number','เลขบัญชี',paySettings.recipient_account_number],
-                    ['recipient_bank','ธนาคาร',paySettings.recipient_bank,true],
-                    ['promptpay_id','พร้อมเพย์',paySettings.promptpay_id],
+                    ['recipient_name','ชื่อ',recipient.recipient_name],
+                    ['account_number','เลขบัญชี',recipient.account_number],
+                    ['bank','ธนาคาร',recipient.bank,true],
+                    ['promptpay_id','พร้อมเพย์',recipient.promptpay_id],
                   ].filter(r=>r[2]).map(([key,label,value,noCopy])=>(
                     <div key={key} style={{
                       display:'flex',alignItems:'center',justifyContent:'space-between',
@@ -219,7 +218,7 @@ export default function PayPage() {
                         <div style={{color:S.muted,fontSize:11}}>{label}</div>
                         <div style={{
                           color:S.text,fontSize:14,fontWeight:600,
-                          fontFamily: key==='recipient_account_number'||key==='promptpay_id'?'monospace':'inherit',
+                          fontFamily: key==='account_number'||key==='promptpay_id'?'monospace':'inherit',
                           wordBreak:'break-all',
                         }}>{value}</div>
                       </div>
@@ -237,8 +236,8 @@ export default function PayPage() {
                       )}
                     </div>
                   ))}
-                  {paySettings.note&&(
-                    <div style={{color:S.dim,fontSize:11,marginTop:8}}>💬 {paySettings.note}</div>
+                  {recipient.note&&(
+                    <div style={{color:S.dim,fontSize:11,marginTop:8}}>💬 {recipient.note}</div>
                   )}
                 </div>
               )}

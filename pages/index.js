@@ -82,6 +82,18 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
   const [fee, setFee] = useState(30)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
+  const [recipients, setRecipients] = useState([])
+  const [recipientId, setRecipientId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/payment-recipients').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) {
+        setRecipients(d)
+        const def = d.find(r => r.is_default) || d[0]
+        if (def) setRecipientId(def.id)
+      }
+    })
+  }, [])
 
   const toggle = (mbrId, menuId) => {
     const key = `${mbrId}|${menuId}`
@@ -101,7 +113,7 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
     setLoading(true)
     const res = await API('/api/orders', {
       method: 'POST',
-      body: { deadline, delivery_fee: fee, items, note },
+      body: { deadline, delivery_fee: fee, items, note, recipient_id: recipientId || null },
     })
     setLoading(false)
 
@@ -111,6 +123,7 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
   }
 
   const activeMenu = menu.filter(m => m.available)
+  const selectedRecipient = recipients.find(r => r.id === recipientId)
 
   return (
     <div style={{
@@ -143,6 +156,35 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
             <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="ถ้ามี..."
               style={{ width: '100%', padding: '10px 12px', background: '#1a1a3e', border: '1px solid #2a2a5a', borderRadius: 10, color: '#e2e2ff', fontFamily: "'Sarabun', sans-serif", fontSize: 14 }} />
           </div>
+        </div>
+
+        {/* ── เลือกบัญชีรับเงิน ── */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ color: '#aaa', fontSize: 13, display: 'block', marginBottom: 6 }}>
+            💳 บัญชีรับเงิน {recipients.length === 0 && <span style={{ color: '#f87171', fontSize: 11 }}>· ยังไม่มีบัญชี ไปเพิ่มที่ตั้งค่า</span>}
+          </label>
+          {recipients.length > 0 ? (
+            <>
+              <select value={recipientId} onChange={e => setRecipientId(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: '#1a1a3e', border: '1px solid #2a2a5a', borderRadius: 10, color: '#e2e2ff', fontFamily: "'Sarabun', sans-serif", fontSize: 14 }}>
+                <option value="">— ไม่ระบุ —</option>
+                {recipients.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.is_default ? '⭐ ' : ''}{r.display_name} ({r.recipient_name})
+                  </option>
+                ))}
+              </select>
+              {selectedRecipient && (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: '#0a0a1e', borderRadius: 8, fontSize: 12, color: '#888' }}>
+                  {selectedRecipient.account_number && <span style={{ fontFamily: 'monospace' }}>{selectedRecipient.account_number}</span>}
+                  {selectedRecipient.bank && <span> · {selectedRecipient.bank}</span>}
+                  {selectedRecipient.promptpay_id && <span> · พร้อมเพย์ {selectedRecipient.promptpay_id}</span>}
+                </div>
+              )}
+            </>
+          ) : (
+            <p style={{ color: '#666', fontSize: 12, padding: '8px 0' }}>ยังไม่มีบัญชีรับเงิน — เพิ่มที่แท็บ ⚙️ ตั้งค่า ก่อน</p>
+          )}
         </div>
 
         <p style={{ color: '#aaa', fontSize: 13, marginBottom: 10 }}>เลือกเมนูสำหรับแต่ละคน:</p>
@@ -314,6 +356,7 @@ function OrderCard({ order, showToast, onDeleted }) {
             </div>
             <div style={{ color: '#666', fontSize: 12 }}>
               📅 {order.order_date} · ⏰ กำหนด {order.deadline} · 🚚 ฿{order.delivery_fee}
+              {order.recipient?.display_name && <> · 💳 {order.recipient.display_name}</>}
             </div>
             {order.note && <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>💬 {order.note}</div>}
           </div>
@@ -491,43 +534,57 @@ function SettingsTab({ menu, members, onMenuChange, onMembersChange, showToast }
   const [newMember, setNewMember] = useState({ name: '', line_user_id: '', avatar_emoji: '🧑' })
   const [loading, setLoading] = useState('')
 
-  // ── ข้อมูลผู้รับเงิน ──
-  const [pay, setPay] = useState({
-    recipient_name: '', recipient_account_number: '',
-    recipient_bank: '', promptpay_id: '', note: '',
+  // ── บัญชีรับเงิน (หลายราย) ──
+  const [recipients, setRecipients] = useState([])
+  const [editRecipientId, setEditRecipientId] = useState(null)
+  const [newRecipient, setNewRecipient] = useState({
+    display_name: '', recipient_name: '', account_number: '',
+    bank: '', promptpay_id: '', note: '', is_default: false,
   })
-  const [payUpdatedAt, setPayUpdatedAt] = useState(null)
-  const [payHasData, setPayHasData] = useState(false)
-  const [paySaved, setPaySaved] = useState(false)
 
-  const loadPaymentSettings = () => {
-    fetch('/api/payment-settings').then(r => r.json()).then(d => {
-      if (d && !d.error) {
-        setPay({
-          recipient_name: d.recipient_name || '',
-          recipient_account_number: d.recipient_account_number || '',
-          recipient_bank: d.recipient_bank || '',
-          promptpay_id: d.promptpay_id || '',
-          note: d.note || '',
-        })
-        setPayUpdatedAt(d.updated_at || null)
-        setPayHasData(!!(d.recipient_name || d.recipient_account_number || d.promptpay_id))
-      }
-    })
+  const loadRecipients = () => {
+    fetch('/api/payment-recipients')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setRecipients(d) })
   }
 
-  useEffect(() => { loadPaymentSettings() }, [])
+  useEffect(() => { loadRecipients() }, [])
 
-  const savePaymentSettings = async () => {
-    setLoading('savePay')
-    const res = await API('/api/payment-settings', { method: 'PUT', body: pay })
+  const addRecipient = async () => {
+    if (!newRecipient.display_name?.trim() || !newRecipient.recipient_name?.trim()) {
+      return showToast('กรอกชื่อย่อและชื่อบนบัญชี', 'error')
+    }
+    setLoading('addRecipient')
+    const body = {
+      ...newRecipient,
+      is_default: recipients.length === 0 || newRecipient.is_default,
+    }
+    const res = await API('/api/payment-recipients', { method: 'POST', body })
     setLoading('')
     if (res.error) return showToast('❌ ' + res.error, 'error')
-    setPaySaved(true)
-    setTimeout(() => setPaySaved(false), 1500)
-    setPayUpdatedAt(res.updated_at || new Date().toISOString())
-    setPayHasData(!!(pay.recipient_name || pay.recipient_account_number || pay.promptpay_id))
-    showToast(payHasData ? '✅ แก้ไขบัญชีรับเงินแล้ว' : '✅ บันทึกบัญชีรับเงินแล้ว')
+    setNewRecipient({ display_name: '', recipient_name: '', account_number: '', bank: '', promptpay_id: '', note: '', is_default: false })
+    loadRecipients()
+    showToast('✅ เพิ่มบัญชีรับเงินแล้ว')
+  }
+
+  const saveRecipient = async (id, updates) => {
+    const res = await API(`/api/payment-recipients/${id}`, { method: 'PATCH', body: updates })
+    if (res.error) return showToast('❌ ' + res.error, 'error')
+    setEditRecipientId(null)
+    loadRecipients()
+    showToast('✅ บันทึกแล้ว')
+  }
+
+  const deleteRecipient = async (id) => {
+    if (!confirm('ลบบัญชีรับเงินนี้?')) return
+    const res = await API(`/api/payment-recipients/${id}`, { method: 'DELETE' })
+    if (res.error) return showToast('❌ ' + res.error, 'error')
+    loadRecipients()
+    showToast('🗑️ ลบแล้ว')
+  }
+
+  const setDefaultRecipient = async (id) => {
+    await saveRecipient(id, { is_default: true })
   }
 
   const updateMenu = async (id, updates) => {
@@ -568,52 +625,75 @@ function SettingsTab({ menu, members, onMenuChange, onMembersChange, showToast }
 
   return (
     <div>
-      {/* ─── ข้อมูลบัญชีรับเงิน ─── */}
+      {/* ─── บัญชีรับเงิน (หลายราย) ─── */}
       <Card style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
-          <h3 style={{ color: '#e2ff5d', margin: 0, fontSize: 15 }}>
-            💳 บัญชีรับเงิน {payHasData && <span style={{ color: '#10b981', fontSize: 11, fontWeight: 500 }}>· ✏️ แก้ไขได้</span>}
-          </h3>
-          {payUpdatedAt && (
-            <span style={{ color: '#555', fontSize: 11 }}>
-              อัปเดต {new Date(payUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Bangkok' })}
-            </span>
-          )}
-        </div>
+        <h3 style={{ color: '#e2ff5d', margin: '0 0 6px', fontSize: 15 }}>
+          💳 บัญชีรับเงิน <span style={{ color: '#888', fontSize: 12, fontWeight: 500 }}>({recipients.length})</span>
+        </h3>
         <p style={{ color: '#666', fontSize: 12, marginBottom: 12 }}>
-          ชื่อ/เลขบัญชีจะแสดงในหน้าจ่ายเงิน และระบบจะตรวจว่าสลิปโอนเข้าชื่อนี้จริงหรือไม่ — แก้ไขได้ทุกเมื่อ
+          เพิ่มได้หลายบัญชี — ตอนสร้างออเดอร์เลือกได้ว่าให้จ่ายที่ใคร · บัญชีที่ทำเครื่องหมาย ⭐ คือค่าเริ่มต้น
         </p>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div>
-            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>ชื่อผู้รับเงิน *</label>
-            <input value={pay.recipient_name} onChange={e => setPay(p => ({ ...p, recipient_name: e.target.value }))}
-              placeholder="เช่น สมชาย ใจดี" style={inputStyle} />
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ flex: 2, minWidth: 180 }}>
-              <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>เลขบัญชี</label>
-              <input value={pay.recipient_account_number} onChange={e => setPay(p => ({ ...p, recipient_account_number: e.target.value }))}
-                placeholder="123-4-56789-0" style={inputStyle} />
+
+        {recipients.length === 0 && (
+          <p style={{ color: '#555', fontSize: 13, padding: '12px 0', textAlign: 'center' }}>
+            ยังไม่มีบัญชี เพิ่มอันแรกได้ด้านล่าง ↓
+          </p>
+        )}
+
+        {recipients.map(r => (
+          <RecipientRow key={r.id} r={r}
+            isEditing={editRecipientId === r.id}
+            onEdit={() => setEditRecipientId(r.id)}
+            onCancel={() => setEditRecipientId(null)}
+            onSave={(updates) => saveRecipient(r.id, updates)}
+            onDelete={() => deleteRecipient(r.id)}
+            onSetDefault={() => setDefaultRecipient(r.id)}
+            inputStyle={inputStyle} />
+        ))}
+
+        {/* เพิ่มบัญชีใหม่ */}
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed #2a2a5a' }}>
+          <p style={{ color: '#aaa', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>+ เพิ่มบัญชี</p>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
+                <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 3 }}>ชื่อย่อ *</label>
+                <input value={newRecipient.display_name}
+                  onChange={e => setNewRecipient(p => ({ ...p, display_name: e.target.value }))}
+                  placeholder="เช่น เอ / ออฟฟิศ" style={inputStyle} />
+              </div>
+              <div style={{ flex: 2, minWidth: 180 }}>
+                <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 3 }}>ชื่อบนบัญชี *</label>
+                <input value={newRecipient.recipient_name}
+                  onChange={e => setNewRecipient(p => ({ ...p, recipient_name: e.target.value }))}
+                  placeholder="เช่น สมชาย ใจดี" style={inputStyle} />
+              </div>
             </div>
-            <div style={{ flex: 1, minWidth: 120 }}>
-              <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>ธนาคาร</label>
-              <input value={pay.recipient_bank} onChange={e => setPay(p => ({ ...p, recipient_bank: e.target.value }))}
-                placeholder="SCB / KBANK..." style={inputStyle} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ flex: 2, minWidth: 160 }}>
+                <input value={newRecipient.account_number}
+                  onChange={e => setNewRecipient(p => ({ ...p, account_number: e.target.value }))}
+                  placeholder="เลขบัญชี 123-4-56789-0" style={inputStyle} />
+              </div>
+              <div style={{ flex: 1, minWidth: 100 }}>
+                <input value={newRecipient.bank}
+                  onChange={e => setNewRecipient(p => ({ ...p, bank: e.target.value }))}
+                  placeholder="ธนาคาร" style={inputStyle} />
+              </div>
             </div>
+            <input value={newRecipient.promptpay_id}
+              onChange={e => setNewRecipient(p => ({ ...p, promptpay_id: e.target.value }))}
+              placeholder="พร้อมเพย์ (ถ้ามี)" style={inputStyle} />
+            <input value={newRecipient.note}
+              onChange={e => setNewRecipient(p => ({ ...p, note: e.target.value }))}
+              placeholder="หมายเหตุ (ถ้ามี)" style={inputStyle} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#aaa', fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={newRecipient.is_default}
+                onChange={e => setNewRecipient(p => ({ ...p, is_default: e.target.checked }))} />
+              ตั้งเป็นบัญชีเริ่มต้น (ใช้เมื่อสร้างออเดอร์ใหม่)
+            </label>
+            <Btn onClick={addRecipient} loading={loading === 'addRecipient'}>+ เพิ่มบัญชี</Btn>
           </div>
-          <div>
-            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>พร้อมเพย์ (ถ้ามี)</label>
-            <input value={pay.promptpay_id} onChange={e => setPay(p => ({ ...p, promptpay_id: e.target.value }))}
-              placeholder="เบอร์ หรือ เลขประจำตัวประชาชน" style={inputStyle} />
-          </div>
-          <div>
-            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>หมายเหตุ</label>
-            <input value={pay.note} onChange={e => setPay(p => ({ ...p, note: e.target.value }))}
-              placeholder="ถ้ามี..." style={inputStyle} />
-          </div>
-          <Btn onClick={savePaymentSettings} loading={loading === 'savePay'}>
-            {paySaved ? '✅ บันทึกแล้ว' : '💾 บันทึก'}
-          </Btn>
         </div>
       </Card>
 
@@ -690,6 +770,76 @@ function SettingsTab({ menu, members, onMenuChange, onMembersChange, showToast }
           ))}
         </div>
       </Card>
+    </div>
+  )
+}
+
+function RecipientRow({ r, isEditing, onEdit, onCancel, onSave, onDelete, onSetDefault, inputStyle }) {
+  const [draft, setDraft] = useState(r)
+  useEffect(() => { setDraft(r) }, [r, isEditing])
+
+  if (isEditing) {
+    return (
+      <div style={{ background: '#0a0a1e', border: '1px solid #2a2a5a', borderRadius: 12, padding: 12, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={draft.display_name || ''} onChange={e => setDraft(p => ({ ...p, display_name: e.target.value }))} placeholder="ชื่อย่อ" style={{ ...inputStyle, flex: 1, minWidth: 120 }} />
+            <input value={draft.recipient_name || ''} onChange={e => setDraft(p => ({ ...p, recipient_name: e.target.value }))} placeholder="ชื่อบนบัญชี" style={{ ...inputStyle, flex: 2, minWidth: 160 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={draft.account_number || ''} onChange={e => setDraft(p => ({ ...p, account_number: e.target.value }))} placeholder="เลขบัญชี" style={{ ...inputStyle, flex: 2, minWidth: 160 }} />
+            <input value={draft.bank || ''} onChange={e => setDraft(p => ({ ...p, bank: e.target.value }))} placeholder="ธนาคาร" style={{ ...inputStyle, flex: 1, minWidth: 100 }} />
+          </div>
+          <input value={draft.promptpay_id || ''} onChange={e => setDraft(p => ({ ...p, promptpay_id: e.target.value }))} placeholder="พร้อมเพย์" style={inputStyle} />
+          <input value={draft.note || ''} onChange={e => setDraft(p => ({ ...p, note: e.target.value }))} placeholder="หมายเหตุ" style={inputStyle} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn size="sm" onClick={() => onSave({
+              display_name: draft.display_name,
+              recipient_name: draft.recipient_name,
+              account_number: draft.account_number || null,
+              bank: draft.bank || null,
+              promptpay_id: draft.promptpay_id || null,
+              note: draft.note || null,
+            })}>✓ บันทึก</Btn>
+            <Btn size="sm" variant="secondary" onClick={onCancel}>ยกเลิก</Btn>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      background: r.is_default ? '#10b98108' : '#12122a',
+      border: `1px solid ${r.is_default ? '#10b98140' : '#1e1e3a'}`,
+      borderRadius: 12, padding: '10px 14px', marginBottom: 8,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+          <span style={{ color: '#e2e2ff', fontWeight: 700, fontSize: 14 }}>{r.display_name}</span>
+          {r.is_default && (
+            <span style={{ background: '#10b98122', color: '#10b981', fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 600 }}>
+              ⭐ ค่าเริ่มต้น
+            </span>
+          )}
+        </div>
+        <div style={{ color: '#888', fontSize: 12 }}>
+          {r.recipient_name}
+          {r.account_number && <> · <span style={{ fontFamily: 'monospace' }}>{r.account_number}</span></>}
+          {r.bank && <> · {r.bank}</>}
+        </div>
+        {r.promptpay_id && (
+          <div style={{ color: '#666', fontSize: 11 }}>พร้อมเพย์ {r.promptpay_id}</div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        {!r.is_default && (
+          <Btn size="sm" variant="ghost" onClick={onSetDefault} title="ตั้งเป็นค่าเริ่มต้น">⭐</Btn>
+        )}
+        <Btn size="sm" variant="ghost" onClick={onEdit}>✏️</Btn>
+        <Btn size="sm" variant="danger" onClick={onDelete}>🗑️</Btn>
+      </div>
     </div>
   )
 }

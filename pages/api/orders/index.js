@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const { data: orders, error: ordersErr } = await db
       .from('orders')
-      .select('*')
+      .select('*, recipient:payment_recipients(id, display_name, recipient_name)')
       .order('created_at', { ascending: false })
 
     if (ordersErr) return res.status(500).json({ error: ordersErr.message })
@@ -34,11 +34,22 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     if (!isAdminRequest(req)) return unauthorized(res)
 
-    const { deadline, delivery_fee, items, note } = req.body
+    const { deadline, delivery_fee, items, note, recipient_id } = req.body
     // items = [{ member_id, menu_item_id, quantity }]
 
     if (!deadline || !items?.length) {
       return res.status(400).json({ error: 'ต้องการ deadline และ items' })
+    }
+
+    // ถ้าไม่ส่ง recipient_id มา ให้ใช้บัญชี default (ถ้ามี)
+    let resolvedRecipientId = recipient_id || null
+    if (!resolvedRecipientId) {
+      const { data: def } = await db
+        .from('payment_recipients')
+        .select('id')
+        .eq('is_default', true)
+        .maybeSingle()
+      resolvedRecipientId = def?.id || null
     }
 
     // 1. สร้างออเดอร์
@@ -49,6 +60,7 @@ export default async function handler(req, res) {
         deadline,
         delivery_fee: Number.isFinite(fee) && fee >= 0 ? fee : 0,
         note,
+        recipient_id: resolvedRecipientId,
         order_date: new Date().toISOString().split('T')[0],
       })
       .select()
