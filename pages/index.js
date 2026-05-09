@@ -84,6 +84,8 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
   const [loading, setLoading] = useState(false)
   const [recipients, setRecipients] = useState([])
   const [recipientId, setRecipientId] = useState('')
+  const [menuSearch, setMenuSearch] = useState('')
+  const [activeMember, setActiveMember] = useState(null) // member_id ที่กำลังเลือก
 
   useEffect(() => {
     fetch('/api/payment-recipients').then(r => r.json()).then(d => {
@@ -99,6 +101,30 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
     const key = `${mbrId}|${menuId}`
     setSelections(p => ({ ...p, [key]: !p[key] }))
   }
+
+  const clearMember = (mbrId) => {
+    setSelections(p => {
+      const next = { ...p }
+      Object.keys(next).forEach(k => { if (k.startsWith(mbrId + '|')) delete next[k] })
+      return next
+    })
+  }
+
+  // นับจำนวน + ยอดรวมต่อสมาชิก
+  const memberStats = (mbrId) => {
+    let count = 0, total = 0
+    for (const k in selections) {
+      if (!selections[k]) continue
+      const [m, menuId] = k.split('|')
+      if (m !== mbrId) continue
+      const menuItem = menu.find(x => x.id === menuId)
+      if (menuItem) { count++; total += menuItem.price }
+    }
+    return { count, total }
+  }
+
+  const totalSelections = Object.values(selections).filter(Boolean).length
+  const totalAmount = members.reduce((s, m) => s + memberStats(m.id).total, 0)
 
   const handleCreate = async () => {
     const items = Object.entries(selections)
@@ -187,49 +213,154 @@ function NewOrderModal({ menu, members, onClose, onCreated }) {
           )}
         </div>
 
-        <p style={{ color: '#aaa', fontSize: 13, marginBottom: 10 }}>เลือกเมนูสำหรับแต่ละคน:</p>
-        <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 400 }}>
-            <thead>
-              <tr>
-                <th style={{ color: '#666', textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #1a1a3e', fontWeight: 500 }}>สมาชิก</th>
-                {activeMenu.map(m => (
-                  <th key={m.id} style={{ color: '#aaa', textAlign: 'center', padding: '8px 6px', borderBottom: '1px solid #1a1a3e', fontWeight: 400 }}>
-                    <div>{m.emoji}</div>
-                    <div style={{ fontSize: 11 }}>{m.name}</div>
-                    <div style={{ color: '#e2ff5d', fontSize: 11 }}>฿{m.price}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map(mbr => (
-                <tr key={mbr.id}>
-                  <td style={{ color: '#e2e2ff', padding: '8px 10px', borderBottom: '1px solid #12122a', whiteSpace: 'nowrap' }}>
-                    {mbr.avatar_emoji} {mbr.name}
-                  </td>
-                  {activeMenu.map(m => {
-                    const key = `${mbr.id}|${m.id}`
+        {/* ── เลือกเมนู: แท็บคน → กดเมนูเป็น chip ── */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+            <p style={{ color: '#aaa', fontSize: 13, margin: 0 }}>
+              เลือกเมนูให้สมาชิก {totalSelections > 0 && (
+                <span style={{ color: '#e2ff5d', fontSize: 12 }}>· {totalSelections} รายการ · ฿{totalAmount}</span>
+              )}
+            </p>
+            <input
+              value={menuSearch}
+              onChange={e => setMenuSearch(e.target.value)}
+              placeholder="🔍 ค้นหาเมนู..."
+              style={{
+                padding: '7px 12px', background: '#1a1a3e', border: '1px solid #2a2a5a',
+                borderRadius: 8, color: '#e2e2ff', fontFamily: "'Sarabun', sans-serif",
+                fontSize: 13, minWidth: 140,
+              }}
+            />
+          </div>
+
+          {/* แท็บเลือกสมาชิก */}
+          <div style={{
+            display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 10,
+            borderBottom: '1px solid #1a1a3e', scrollbarWidth: 'thin',
+          }}>
+            {members.map(mbr => {
+              const { count, total } = memberStats(mbr.id)
+              const isActive = activeMember === mbr.id || (activeMember == null && mbr.id === members[0]?.id)
+              return (
+                <button
+                  key={mbr.id}
+                  onClick={() => setActiveMember(mbr.id)}
+                  style={{
+                    flexShrink: 0, padding: '8px 12px', borderRadius: 10,
+                    background: isActive ? '#e2ff5d' : count > 0 ? '#10b98115' : '#1a1a3e',
+                    border: `1px solid ${isActive ? '#e2ff5d' : count > 0 ? '#10b98140' : '#2a2a5a'}`,
+                    color: isActive ? '#0f0f23' : count > 0 ? '#10b981' : '#aaa',
+                    cursor: 'pointer', fontFamily: "'Sarabun', sans-serif",
+                    fontWeight: isActive ? 700 : 500, fontSize: 13,
+                    display: 'flex', alignItems: 'center', gap: 5, transition: 'all .15s',
+                  }}
+                >
+                  <span style={{ fontSize: 15 }}>{mbr.avatar_emoji}</span>
+                  <span>{mbr.name}</span>
+                  {count > 0 && (
+                    <span style={{
+                      background: isActive ? '#0f0f23' : '#10b98130',
+                      color: isActive ? '#e2ff5d' : '#10b981',
+                      padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                    }}>{count}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* เมนูของคนที่เลือก */}
+          {(() => {
+            const currentMbr = members.find(m => m.id === activeMember) || members[0]
+            if (!currentMbr) return null
+            const { count, total } = memberStats(currentMbr.id)
+            const filteredMenu = activeMenu.filter(m =>
+              !menuSearch || m.name.toLowerCase().includes(menuSearch.toLowerCase())
+            )
+
+            return (
+              <div style={{ background: '#0a0a1e', border: '1px solid #1a1a3e', borderRadius: 12, padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ color: '#e2e2ff', fontSize: 14, fontWeight: 600 }}>
+                    {currentMbr.avatar_emoji} {currentMbr.name}
+                    {count > 0 && (
+                      <span style={{ color: '#e2ff5d', fontSize: 12, marginLeft: 8, fontWeight: 500 }}>
+                        · {count} รายการ ฿{total}
+                      </span>
+                    )}
+                  </span>
+                  {count > 0 && (
+                    <button
+                      onClick={() => clearMember(currentMbr.id)}
+                      style={{
+                        background: 'transparent', border: '1px solid #ef444444',
+                        color: '#f87171', padding: '4px 10px', borderRadius: 8,
+                        fontSize: 11, cursor: 'pointer', fontFamily: "'Sarabun', sans-serif",
+                      }}
+                    >ล้างของคนนี้</button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {filteredMenu.map(m => {
+                    const key = `${currentMbr.id}|${m.id}`
                     const checked = !!selections[key]
                     return (
-                      <td key={m.id} style={{ textAlign: 'center', padding: '8px 6px', borderBottom: '1px solid #12122a' }}>
-                        <button onClick={() => toggle(mbr.id, m.id)} style={{
-                          width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 14,
+                      <button
+                        key={m.id}
+                        onClick={() => toggle(currentMbr.id, m.id)}
+                        style={{
+                          padding: '8px 12px', borderRadius: 10, cursor: 'pointer',
                           background: checked ? '#e2ff5d' : '#1a1a3e',
-                          border: checked ? 'none' : '1px solid #2a2a5a',
-                          color: checked ? '#0f0f23' : '#444',
-                          transition: 'all 0.12s',
-                          fontWeight: 700,
-                        }}>
-                          {checked ? '✓' : ''}
-                        </button>
-                      </td>
+                          border: `1px solid ${checked ? '#e2ff5d' : '#2a2a5a'}`,
+                          color: checked ? '#0f0f23' : '#e2e2ff',
+                          fontFamily: "'Sarabun', sans-serif",
+                          fontSize: 13, fontWeight: checked ? 700 : 500,
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          transition: 'all .12s',
+                          minHeight: 36,
+                        }}
+                      >
+                        <span style={{ fontSize: 15 }}>{m.emoji}</span>
+                        <span>{m.name}</span>
+                        <span style={{
+                          color: checked ? '#0f0f23' : '#e2ff5d',
+                          fontWeight: 700, fontSize: 12, opacity: checked ? 0.7 : 1,
+                        }}>฿{m.price}</span>
+                        {checked && <span style={{ marginLeft: 2 }}>✓</span>}
+                      </button>
                     )
                   })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {filteredMenu.length === 0 && (
+                    <span style={{ color: '#555', fontSize: 13, padding: '6px 0' }}>ไม่พบเมนูที่ค้นหา</span>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* สรุปรวมทุกคน (ถ้ามีเลือกแล้ว) */}
+          {totalSelections > 0 && (
+            <div style={{ marginTop: 12, padding: '10px 12px', background: '#10b98108', border: '1px solid #10b98130', borderRadius: 10 }}>
+              <div style={{ color: '#10b981', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                📋 สรุปออเดอร์
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {members.filter(m => memberStats(m.id).count > 0).map(m => {
+                  const { count, total } = memberStats(m.id)
+                  return (
+                    <span key={m.id} style={{
+                      background: '#10b98115', color: '#10b981',
+                      padding: '3px 9px', borderRadius: 12, fontSize: 11,
+                      border: '1px solid #10b98130',
+                    }}>
+                      {m.avatar_emoji} {m.name}: {count} · ฿{total}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
