@@ -33,6 +33,8 @@ export default function PayPage() {
   const [toast,setToast]       = useState(null)
   const [token,setToken]       = useState(null)
   const [orderId,setOrderId]   = useState(null)
+  const [paySettings,setPaySettings] = useState(null)
+  const [copiedKey,setCopiedKey]     = useState(null)
 
   useEffect(()=>{
     const params = new URLSearchParams(window.location.search)
@@ -45,7 +47,20 @@ export default function PayPage() {
       .then(d=>{if(d.error)setError(d.error);else setData(d)})
       .catch(()=>setError('โหลดข้อมูลไม่สำเร็จ'))
       .finally(()=>setLoading(false))
+
+    fetch('/api/payment-settings')
+      .then(r=>r.json())
+      .then(d=>{ if(d && !d.error) setPaySettings(d) })
+      .catch(()=>{})
   },[])
+
+  const copyText = (key, value) => {
+    if(!value) return
+    navigator.clipboard?.writeText(String(value))
+    setCopiedKey(key)
+    setToast({msg:'📋 คัดลอกแล้ว'})
+    setTimeout(()=>setCopiedKey(null), 1500)
+  }
 
   const handleFile=(e)=>{
     const f=e.target.files[0]; if(!f)return
@@ -178,6 +193,53 @@ export default function PayPage() {
               ):(
                 <div style={{background:'#1a0a0a',border:'1px solid #ef444430',borderRadius:14,padding:16,marginBottom:16,textAlign:'center'}}>
                   <p style={{color:'#f87171',fontSize:14}}>⚠️ ไม่พบข้อมูลของคุณ กรุณาใช้ลิงก์ที่ได้รับจาก LINE</p>
+                </div>
+              )}
+
+              {/* ── ข้อมูลบัญชีรับเงิน ── */}
+              {member&&!alreadyPaid&&!done&&paySettings&&(paySettings.recipient_name||paySettings.recipient_account_number||paySettings.promptpay_id)&&(
+                <div style={{
+                  background:S.card,border:`1px solid ${S.border}`,
+                  borderRadius:14,padding:16,marginBottom:16,
+                }}>
+                  <div style={{color:S.accent,fontSize:13,fontWeight:600,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+                    💳 โอนเข้าบัญชีนี้
+                  </div>
+                  {[
+                    ['recipient_name','ชื่อ',paySettings.recipient_name],
+                    ['recipient_account_number','เลขบัญชี',paySettings.recipient_account_number],
+                    ['recipient_bank','ธนาคาร',paySettings.recipient_bank,true],
+                    ['promptpay_id','พร้อมเพย์',paySettings.promptpay_id],
+                  ].filter(r=>r[2]).map(([key,label,value,noCopy])=>(
+                    <div key={key} style={{
+                      display:'flex',alignItems:'center',justifyContent:'space-between',
+                      padding:'8px 0',borderBottom:`1px solid ${S.border}`,gap:8,
+                    }}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{color:S.muted,fontSize:11}}>{label}</div>
+                        <div style={{
+                          color:S.text,fontSize:14,fontWeight:600,
+                          fontFamily: key==='recipient_account_number'||key==='promptpay_id'?'monospace':'inherit',
+                          wordBreak:'break-all',
+                        }}>{value}</div>
+                      </div>
+                      {!noCopy&&(
+                        <button onClick={()=>copyText(key,value)} style={{
+                          background:copiedKey===key?S.green:'#1a1a3e',
+                          border:`1px solid ${copiedKey===key?S.green:S.border2}`,
+                          color:copiedKey===key?'white':S.accent,
+                          padding:'7px 12px',borderRadius:8,fontSize:12,fontWeight:600,
+                          cursor:'pointer',fontFamily:"'Sarabun',sans-serif",flexShrink:0,
+                          transition:'all .15s',
+                        }}>
+                          {copiedKey===key?'✓ คัดลอก':'📋 คัดลอก'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {paySettings.note&&(
+                    <div style={{color:S.dim,fontSize:11,marginTop:8}}>💬 {paySettings.note}</div>
+                  )}
                 </div>
               )}
 

@@ -491,6 +491,45 @@ function SettingsTab({ menu, members, onMenuChange, onMembersChange, showToast }
   const [newMember, setNewMember] = useState({ name: '', line_user_id: '', avatar_emoji: '🧑' })
   const [loading, setLoading] = useState('')
 
+  // ── ข้อมูลผู้รับเงิน ──
+  const [pay, setPay] = useState({
+    recipient_name: '', recipient_account_number: '',
+    recipient_bank: '', promptpay_id: '', note: '',
+  })
+  const [payUpdatedAt, setPayUpdatedAt] = useState(null)
+  const [payHasData, setPayHasData] = useState(false)
+  const [paySaved, setPaySaved] = useState(false)
+
+  const loadPaymentSettings = () => {
+    fetch('/api/payment-settings').then(r => r.json()).then(d => {
+      if (d && !d.error) {
+        setPay({
+          recipient_name: d.recipient_name || '',
+          recipient_account_number: d.recipient_account_number || '',
+          recipient_bank: d.recipient_bank || '',
+          promptpay_id: d.promptpay_id || '',
+          note: d.note || '',
+        })
+        setPayUpdatedAt(d.updated_at || null)
+        setPayHasData(!!(d.recipient_name || d.recipient_account_number || d.promptpay_id))
+      }
+    })
+  }
+
+  useEffect(() => { loadPaymentSettings() }, [])
+
+  const savePaymentSettings = async () => {
+    setLoading('savePay')
+    const res = await API('/api/payment-settings', { method: 'PUT', body: pay })
+    setLoading('')
+    if (res.error) return showToast('❌ ' + res.error, 'error')
+    setPaySaved(true)
+    setTimeout(() => setPaySaved(false), 1500)
+    setPayUpdatedAt(res.updated_at || new Date().toISOString())
+    setPayHasData(!!(pay.recipient_name || pay.recipient_account_number || pay.promptpay_id))
+    showToast(payHasData ? '✅ แก้ไขบัญชีรับเงินแล้ว' : '✅ บันทึกบัญชีรับเงินแล้ว')
+  }
+
   const updateMenu = async (id, updates) => {
     const res = await API('/api/menu', { method: 'PATCH', body: { id, ...updates } })
     if (res.error) return showToast('❌ ' + res.error, 'error')
@@ -521,8 +560,63 @@ function SettingsTab({ menu, members, onMenuChange, onMembersChange, showToast }
     showToast(`✅ เพิ่ม ${newMember.name} แล้ว`)
   }
 
+  const inputStyle = {
+    width: '100%', padding: '10px 12px', background: '#1a1a3e',
+    border: '1px solid #2a2a5a', borderRadius: 10, color: '#e2e2ff',
+    fontFamily: "'Sarabun', sans-serif", fontSize: 14, outline: 'none',
+  }
+
   return (
     <div>
+      {/* ─── ข้อมูลบัญชีรับเงิน ─── */}
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
+          <h3 style={{ color: '#e2ff5d', margin: 0, fontSize: 15 }}>
+            💳 บัญชีรับเงิน {payHasData && <span style={{ color: '#10b981', fontSize: 11, fontWeight: 500 }}>· ✏️ แก้ไขได้</span>}
+          </h3>
+          {payUpdatedAt && (
+            <span style={{ color: '#555', fontSize: 11 }}>
+              อัปเดต {new Date(payUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Bangkok' })}
+            </span>
+          )}
+        </div>
+        <p style={{ color: '#666', fontSize: 12, marginBottom: 12 }}>
+          ชื่อ/เลขบัญชีจะแสดงในหน้าจ่ายเงิน และระบบจะตรวจว่าสลิปโอนเข้าชื่อนี้จริงหรือไม่ — แก้ไขได้ทุกเมื่อ
+        </p>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div>
+            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>ชื่อผู้รับเงิน *</label>
+            <input value={pay.recipient_name} onChange={e => setPay(p => ({ ...p, recipient_name: e.target.value }))}
+              placeholder="เช่น สมชาย ใจดี" style={inputStyle} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ flex: 2, minWidth: 180 }}>
+              <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>เลขบัญชี</label>
+              <input value={pay.recipient_account_number} onChange={e => setPay(p => ({ ...p, recipient_account_number: e.target.value }))}
+                placeholder="123-4-56789-0" style={inputStyle} />
+            </div>
+            <div style={{ flex: 1, minWidth: 120 }}>
+              <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>ธนาคาร</label>
+              <input value={pay.recipient_bank} onChange={e => setPay(p => ({ ...p, recipient_bank: e.target.value }))}
+                placeholder="SCB / KBANK..." style={inputStyle} />
+            </div>
+          </div>
+          <div>
+            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>พร้อมเพย์ (ถ้ามี)</label>
+            <input value={pay.promptpay_id} onChange={e => setPay(p => ({ ...p, promptpay_id: e.target.value }))}
+              placeholder="เบอร์ หรือ เลขประจำตัวประชาชน" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ color: '#aaa', fontSize: 12, display: 'block', marginBottom: 4 }}>หมายเหตุ</label>
+            <input value={pay.note} onChange={e => setPay(p => ({ ...p, note: e.target.value }))}
+              placeholder="ถ้ามี..." style={inputStyle} />
+          </div>
+          <Btn onClick={savePaymentSettings} loading={loading === 'savePay'}>
+            {paySaved ? '✅ บันทึกแล้ว' : '💾 บันทึก'}
+          </Btn>
+        </div>
+      </Card>
+
       {/* ─── เมนูน้ำ ─── */}
       <Card style={{ marginBottom: 14 }}>
         <h3 style={{ color: '#e2ff5d', margin: '0 0 14px', fontSize: 15 }}>🧋 จัดการเมนูน้ำ</h3>

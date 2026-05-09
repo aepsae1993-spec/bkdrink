@@ -42,11 +42,12 @@ export default async function handler(req, res) {
     }
 
     // 1. สร้างออเดอร์
+    const fee = Number(delivery_fee)
     const { data: order, error: orderErr } = await db
       .from('orders')
       .insert({
         deadline,
-        delivery_fee: delivery_fee || 30,
+        delivery_fee: Number.isFinite(fee) && fee >= 0 ? fee : 0,
         note,
         order_date: new Date().toISOString().split('T')[0],
       })

@@ -3,7 +3,7 @@
 import { getServiceClient } from '../../../lib/supabase'
 import { pushToGroup, buildCompletedMessage } from '../../../lib/line'
 import { uploadViaAppsScript } from '../../../lib/appsscript'
-import { verifySlipWithEasySlip, checkSlipAgainstOrder } from '../../../lib/easyslip'
+import { verifySlipWithEasySlip, namesMatch } from '../../../lib/easyslip'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '5mb' } },
@@ -116,6 +116,15 @@ export default async function handler(req, res) {
     const mimeType   = fileExt === 'png' ? 'image/png' : 'image/jpeg'
     const fileBuffer = Buffer.from(image_base64, 'base64')
 
+    // ─── ดึงตั้งค่าผู้รับเงิน (ถ้าตั้งไว้จะตรวจชื่อบนสลิปด้วย) ─────────────
+    const { data: paySettings } = await db
+      .from('payment_settings')
+      .select('recipient_name')
+      .eq('id', 1)
+      .maybeSingle()
+
+    const expectedReceiver = paySettings?.recipient_name?.trim() || null
+
     // ─── ตรวจสอบสลิปกับ EasySlip API ──────────────────────────────────────
     let slipInfo = null
     try {
@@ -127,6 +136,13 @@ export default async function handler(req, res) {
 
       if (slipResult.amount < expectedAmount) {
         return res.status(400).json({ error: 'กรุณาโอนให้ครบ' })
+      }
+
+      // ตรวจชื่อผู้รับว่าตรงกับที่ตั้งไว้
+      if (expectedReceiver && !namesMatch(slipResult.receiver, expectedReceiver)) {
+        return res.status(400).json({
+          error: `ผู้รับไม่ตรงกับบัญชีที่กำหนด (สลิประบุ "${slipResult.receiver || '—'}" / ต้องโอนเข้า "${expectedReceiver}")`,
+        })
       }
 
       slipInfo = {
