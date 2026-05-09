@@ -48,7 +48,10 @@ ALTER TABLE orders
   ADD COLUMN IF NOT EXISTS recipient_id UUID REFERENCES payment_recipients(id) ON DELETE SET NULL;
 
 -- ── อัปเดต view ให้พ่วง recipient ─────────────────────────────────────────
-CREATE OR REPLACE VIEW order_member_summary AS
+-- ต้อง DROP ก่อน เพราะ CREATE OR REPLACE VIEW ไม่อนุญาตเปลี่ยนตำแหน่ง column
+DROP VIEW IF EXISTS order_member_summary;
+
+CREATE VIEW order_member_summary AS
 SELECT
   o.id AS order_id,
   o.order_number,
